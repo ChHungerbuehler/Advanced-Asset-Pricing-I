@@ -29,10 +29,9 @@ setwd(here())
 We begin by setting some parameters. These parameters will determine what the script does exactly.
 
 ```{r, set parameters, echo=FALSE}
-#symbol    <- 'AMD'              # Advanced Micro Devices
-#symbol    <- 'AMD'              # Advanced Micro Devices
+symbol    <- 'AMD'              # Advanced Micro Devices
 #symbol    <- 'UBS'              # UBS Group, NYSE
-symbol    <- 'UBSG.SW'          # UBS Group, SIX
+#symbol    <- 'UBSG.SW'          # UBS Group, SIX
 #symbol    <- 'GOOG'             # Alphabet
 #symbol    <- 'NESN.SW'          # Nestlé
 #symbol    <- 'GM'               # General Motors
@@ -75,6 +74,7 @@ price <- as.numeric(data$price_adjusted)
 dates <- as.Date(data$ref_date)
 
 yield <- diff(log(price)) * factor
+#yield <- diff(log(price))
 ```
 
 # 3 Estimate GARCH
@@ -113,8 +113,16 @@ GARCH <- function(param, eps) {
     # WORK FOR YOU HERE
     # Program the GARCH process for sigma2 here and compute the log likelihood
     # for each observed period.
+    n <- length(eps)
     
-    # ...
+    logL <- c()
+    #sigma2 <- c(omega / (1 - alpha - beta))
+    sigma2 <- c(param[4])
+    for (i in 1:n) {
+      logL <- c(logL, dnorm(eps[i], mean=0, sd=sqrt(sigma2[i]), log=TRUE))
+      sigma2 <- c(sigma2, omega + alpha * eps[i]^2 + beta * sigma2[i])
+    }
+    #sigma2 <- sigma2[2:n] # same length as eps
     
     # return results
     # These should be two vectors, with one entry for each observed date.
@@ -145,9 +153,10 @@ param <- c(
 ```
 
 ```{r, running non-linear optimization}
-    # WORK FOR YOU HERE
-    # running the NL opt (use the nlminn procedure here)
-    # ...
+# WORK FOR YOU HERE
+# running the NL opt (use the nlminb procedure here)
+mu = mean(yield)
+out <- nlminb(param, negLL, eps=yield - mu, lower=c(0, 0, 0, 0), upper=c(999, 1, 1, 999))
 ```
 
 # 4 Reporting results
@@ -172,7 +181,7 @@ if (alpha+beta >= 1) {
 }
 
 # extract eps and sigma of optimized process
-result      <- GARCH(out$par, yield)
+result      <- GARCH(out$par, yield - mu) 
 sigma2      <- result$sigma2
 sigma       <- sqrt(sigma2)
 ```
