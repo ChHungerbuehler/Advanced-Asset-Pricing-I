@@ -1,0 +1,152 @@
+#!/usr/bin/env KnitWrapper.sh
+
+---
+title: "Simulation of an equity"
+author: "Christian Hungerbuehler"
+date: "2025-09-18"
+license: "MIT"
+output: pdf_document
+geometry: a4paper
+fontsize: 12pt
+fontfamily: charter
+---
+
+This script downloads some stock market data from finance.yahoo.com and then performs a Monte Carlo simulation.
+
+```{r setup, include=FALSE}
+# install and load some packages if they are missing
+packages <- c('yfR','scales','here','curl') 
+missing_packages <- !(packages %in% rownames(installed.packages()))
+if (any(missing_packages)) {install.packages(packages[missing_packages])}
+invisible(lapply(packages, library, character.only = TRUE))
+
+# select location of this file as working directory
+setwd(here())
+```
+
+# 1 Parameters
+
+We begin by setting some parameters. These parameters will determine what the script does exactly:
+
+```{r, set parameters, include=FALSE}
+#symbol    <- 'AMD'              # Advanced Micro Devices
+#symbol    <- 'NVDA'             # NVIDIA Corp
+#symbol    <- 'UBS'              # UBS Group, NYSE
+#symbol    <- 'UBSG.SW'          # UBS Group, SIX
+#symbol    <- 'GOOG'             # Alphabet
+#symbol    <- 'NESN.SW'          # Nestlé
+#symbol    <- 'GM'               # General Motors
+symbol    <- 'MSFT'             # Microsoft
+#symbol    <- 'PM'               # Philip Morris
+#symbol    <- 'XOM'              # Exxon Mobil
+#symbol    <- 'IONQ'             # IonQ
+#symbol    <- '^GSPC'            # S&P500 index
+#symbol    <- 'BTC-USD'          # BTC in USD
+#symbol    <- 'CHFUSD=X'         # CHF-USD FX
+
+from_date  <- '2010-12-01'
+to_date    <- '2024-12-31'
+interval   <- 'weekly'
+
+sim_years  <- 2                 # length of simulation in years
+n          <- 1000              # number of simulations
+
+draw_paths <- TRUE              # make charts or not?
+```
+
+```{r, helper functions, include=FALSE}
+# we will use this later
+factor <- switch(
+    interval,
+        'monthly' = 12,          # number of trading months
+        'weekly'  = 365.25/7,    # number of trading weeks
+        'daily'   = 365.25*5/7   # number of trading days
+    )
+```
+
+```{r, results='asis', echo=FALSE}
+cat(sprintf('Data from %s is used from %s to %s in a %s interval.\n', symbol, from_date, to_date, interval))
+cat(sprintf('This is then used to generate %i random paths for %#.2f years into the future.\n', n, sim_years))
+```
+
+The data are downloaded now, but the code for that is hidden.
+
+```{r, download data, include=FALSE}
+data <- yf_get(
+    tickers = symbol,
+    first_date = from_date,
+    last_date = to_date,
+    freq_data = interval,
+    do_cache = TRUE,
+    be_quiet = TRUE
+)
+price <- as.numeric(data$price_adjusted)
+dates <- as.Date(data$ref_date)
+yield  <- diff(log(price)) * factor
+```
+
+# 2 Compute Monte-Carlo simulation assuming normal distribution
+
+Write code that generates random future paths of the equity price. Your
+simulation should cover 'sim_years' years and you should generate 'n' such
+paths.
+
+The following functions are helpful in this endeavor:
+'rnorm' : This function generates normally distributed random numbers.
+'apply' : This procedure applies a function to each element of a matrix.
+'cumsum': Compute the cumulative sum of a vector, i.e. x1, x1+x2, 
+          x1+x2+x3, ..., x1+x2+x3+...+xn.
+You can use ?command (e.g. ?rnorm) to get some help for any command.
+
+===> WORK FOR YOU HERE <===
+
+```{r, compute MC}
+# first and second moment of the data
+mu <- mean(yield)
+sigma <- sd(yield)
+
+# how many steps do we have to simulate?
+nr_of_steps <- sim_years * factor
+
+# accumulate random returns to get log levels
+# Calculate the accumulated sum of nr_of_steps draws from a normal distribution
+# with mean=mu and standard deviation=sd.
+# Use replicate to repeat this n times.
+# Note: t() transposes the matrix so that the each row is one simulated path
+acc_log_ret <- t(replicate(n, cumsum(rnorm(nr_of_steps, mu, sigma)/factor)))
+
+# Sanity checks
+# The cross-sectional average of the accumulated log returns after factor
+# periods should approx. equal the annualized mean.
+mean(acc_log_ret[,factor]) - mu
+# The standard deviation grows by factor sqrt(factor)
+# Let r_i ~ N(mu,sigma^2)
+# sd = sqrt(Var(sum^factor_(i=1)r_i)) [independence]
+# sqrt(sum^factor_(i=1)Var(r_i)) [identically distributed]
+# sqrt(sum^factor_(i=1)sigma^2)  [summing]
+# sqrt(factor*sigma^2) = sqrt(factor)*sigma
+sd(acc_log_ret[,factor])*sqrt(factor) - sigma
+
+# transform log level to plain level
+acc_smpl_ret <- exp(acc_log_ret) - 1
+```
+
+# **** make some charts *******************************************************
+
+# ===> WORK FOR YOU HERE <===
+
+```{r, plot}
+p0_acc_log_ret <- cbind(rep(0,n),acc_log_ret) + log(price[1])
+matplot(t(p0_acc_log_ret), ylab="", type='l', col=1)
+title(main=paste("Accumulated", interval, "log returns of", symbol),
+      xlab="Simulation steps",
+      ylab="Log price")
+
+P0_acc_smpl_ret <- exp(p0_acc_log_ret)
+matplot(t(P0_acc_smpl_ret), ylab="", type='l', col="blue")
+# Use pch=20 to used filled dots
+points(price[1:(nr_of_steps + 1)], pch=20, col="red")
+title(main=paste("Accumulated", interval, "simple returns of", symbol),
+      xlab="Simulation steps",
+      ylab="Simple price")
+```
